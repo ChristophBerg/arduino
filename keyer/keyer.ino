@@ -5,7 +5,8 @@
 #define KEY 1 // P1 with on-board LED
 #define SPEED 0 // P5
 
-#define STEP 5 // delay() granularity
+#define DAH_WEIGHT 2.5
+#define STEP 2 // delay() granularity
 
 char send[100];
 
@@ -26,7 +27,7 @@ static inline bool dah_press() {
 }
 
 static inline int duration() {
-  return (1200 - analogRead(SPEED)) / 4;
+  return (1120 - analogRead(SPEED)) / 4;
 }
 
 static inline void wait(int d) {
@@ -34,14 +35,18 @@ static inline void wait(int d) {
 }
 
 void loop() {
-  int state = 0;
+  volatile int state = 0;
   int d;
   int i;
 
   while(1) {
+    d = duration();
+
     switch (state) {
 
       case 0: /* start */
+        digitalWrite(KEY, LOW);
+
         if (SerialUSB.available()) {
           char input = SerialUSB.read();
           *send = input;
@@ -49,74 +54,118 @@ void loop() {
         }
 
         if (dit_press())
-          state = 2;
+          state = 1;
         else if (dah_press())
-          state = 3;
+          state = 2;
 
         break;
 
-      case 1: /* pause */
-        d = duration();
-        digitalWrite(KEY, LOW);
-        state = 0;
-        for (i = 0; i < d; i += STEP) {
-          wait(STEP);
-          if (dit_press())
-            state = 2;
-          else if (dah_press())
-            state = 3;
-        }
-        break;
-
-      case 2: /* dit */
-        d = duration();
+      case 1: /* dit */
         digitalWrite(KEY, HIGH);
-        state = 1;
+        state = 3; /* go to pause after dit */
         for (i = 0; i < d; i += STEP) {
           wait(STEP);
           if (dah_press())
-            state = 5;
+            state = 6; /* go to pause before dah */
         }
         break;
 
-      case 3: /* dah */
-        d = 3 * duration();
+      case 2: /* dah */
+        d *= DAH_WEIGHT;
         digitalWrite(KEY, HIGH);
-        state = 1;
+        state = 4; /* go to pause after dah */
         for (i = 0; i < d; i += STEP) {
           wait(STEP);
           if (dit_press())
-            state = 4;
+            state = 5; /* go to pause before dit */
         }
         break;
 
-      case 4: /* pause before dit */
-        d = duration();
+      case 3: /* pause after dit */
         digitalWrite(KEY, LOW);
-        state = 2;
-        wait(d);
+        state = 0; /* go to idle */
+        for (i = 0; i < d; i += STEP) {
+          wait(STEP);
+          if (dah_press())
+            state = 2; /* go to dah */
+        }
         break;
 
-      case 5: /* pause before dah */
-        d = duration();
+      case 4: /* pause after dah */
         digitalWrite(KEY, LOW);
-        state = 3;
-        wait(d);
+        state = 0; /* go to idle */
+        for (i = 0; i < d; i += STEP) {
+          wait(STEP);
+          if (dit_press())
+            state = 1; /* go to dit */
+        }
+        break;
+
+      case 5: /* pause before dit */
+        digitalWrite(KEY, LOW);
+        state = 1; /* go to dit */
+        for (i = 0; i < d; i += STEP) {
+          wait(STEP);
+          if (dit_press())
+            state = 1; /* still go to dit */
+        }
+        break;
+
+      case 6: /* pause before dah */
+        digitalWrite(KEY, LOW);
+        state = 2; /* go to dah */
+        for (i = 0; i < d; i += STEP) {
+          wait(STEP);
+          if (dit_press())
+            state = 2; /* still go to dah */
+        }
         break;
 
       case 10: /* USB input */
         switch (*send) {
           case 'A':
             digitalWrite(KEY, HIGH);
-            wait(duration());
+            for (i = 0; i < d; i += STEP) {
+              wait(STEP);
+              if (dit_press() || dah_press()) {
+                state = 11; /* go to cancel */
+                break;
+              }
+            }
             digitalWrite(KEY, LOW);
-            wait(duration());
+            for (i = 0; i < d; i += STEP) {
+              wait(STEP);
+              if (dit_press() || dah_press()) {
+                state = 11;
+                break;
+              }
+            }
             digitalWrite(KEY, HIGH);
-            wait(3 * duration());
+            for (i = 0; i < DAH_WEIGHT*d; i += STEP) {
+              wait(STEP);
+              if (dit_press() || dah_press()) {
+                state = 11;
+                break;
+              }
+            }
             digitalWrite(KEY, LOW);
-            wait(duration());
+            for (i = 0; i < d; i += STEP) {
+              wait(STEP);
+              if (dit_press() || dah_press()) {
+                state = 11;
+                break;
+              }
+            }
+        }
+        state = 11;
+        break;
+
+      case 11: /* cancel USB operation */
+        while (dit_press() || dah_press()) {
+          wait(STEP);
         }
         state = 0;
+        break;
 
     }
   }
