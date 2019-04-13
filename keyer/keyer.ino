@@ -6,7 +6,7 @@
 #define SPEED 0 // P5
 
 #define DAH_WEIGHT 2.5
-#define PAUSE_WEIGHT 1.5
+#define PAUSE_WEIGHT 2.0
 #define STEP 2 // delay() granularity
 
 char send[100];
@@ -32,13 +32,18 @@ static inline bool dah_press() {
 }
 
 static inline int get_duration() {
-  return (1120 - analogRead(SPEED)) / 4;
+  return (1120 - analogRead(SPEED)) / 8;
 }
 
 static void get_usb()
 {
   while (SerialUSB.available()) {
     char input = SerialUSB.read();
+    if (input == '*') { /* reset queue */
+      *send = '\0';
+      send_ptr = send;
+      break;
+    }
     *send_ptr = input;
     send_ptr++;
   }
@@ -137,9 +142,7 @@ void loop() {
           case ' ':
             send_symbol(LOW, PAUSE_WEIGHT * duration, 11, 11);
             break;
-          default:
-            state = 0;
-            break;
+          /* ignore all other symbols */
         }
 
         for (int i = 0; send[i+1]; i++) {
