@@ -37,7 +37,7 @@ static inline int get_duration() {
 
 static void get_usb()
 {
-  if (SerialUSB.available()) {
+  while (SerialUSB.available()) {
     char input = SerialUSB.read();
     *send_ptr = input;
     send_ptr++;
@@ -46,54 +46,6 @@ static void get_usb()
 
 static inline void wait(int duration) {
   SerialUSB.delay(duration);
-}
-
-static char *morse_char(char c) {
-  switch (c) {
-    case ' ': return " ";
-    case 'A': return ".-";
-    case 'B': return "-...";
-    case 'C': return "-.-.";
-    case 'D': return "-..";
-    case 'E': return ".";
-    case 'F': return "..-.";
-    case 'G': return "--.";
-    case 'H': return "....";
-    case 'I': return "..";
-              /*
-    case 'J': return ".---";
-    case 'K': return "-.-";
-    case 'L': return ".-..";
-    case 'M': return "--";
-    case 'N': return "-.";
-    case 'O': return "---";
-    case 'P': return ".--.";
-    case 'Q': return "--.-";
-    case 'R': return ".-.";
-    case 'S': return "...";
-    case 'T': return "-";
-    case 'U': return "..-";
-    case 'V': return "...-";
-    case 'W': return ".--";
-    case 'X': return "-..-";
-    case 'Y': return "--.-";
-    case 'Z': return "--..";
-    case '0': return "-----";
-    case '1': return ".----";
-    case '2': return "..---";
-    case '3': return "...--";
-    case '4': return "....-";
-    case '5': return ".....";
-    case '6': return "-....";
-    case '7': return "--...";
-    case '8': return "---..";
-    case '9': return "----.";
-    case '/': return "-..-.";
-    case '=': return "-...-";
-    case '-': return "-....-";
-    */
-    default: return NULL;
-  }
 }
 
 static void send_symbol(int level, int duration, int dit_state, int dah_state)
@@ -111,9 +63,6 @@ static void send_symbol(int level, int duration, int dit_state, int dah_state)
 }
 
 void loop() {
-  int i;
-  char *morse;
-
   while(1) {
     duration = get_duration();
 
@@ -173,33 +122,31 @@ void loop() {
           state = 11;
           break;
         }
-        morse = morse_char(*send);
-        if (!morse) {
-          state = 11;
-          break;
+
+        switch (*send) {
+          case '.':
+            send_symbol(HIGH, duration, 11, 11);
+            if (state != 11)
+              send_symbol(LOW, duration, 11, 11);
+            break;
+          case '-':
+            send_symbol(HIGH, DAH_WEIGHT * duration, 11, 11);
+            if (state != 11)
+              send_symbol(LOW, duration, 11, 11);
+            break;
+          case ' ':
+            send_symbol(LOW, PAUSE_WEIGHT * duration, 11, 11);
+            break;
+          default:
+            state = 0;
+            break;
         }
+
         for (int i = 0; send[i+1]; i++) {
           send[i] = send[i+1]; /* shift array left */
         }
         send_ptr--;
         *send_ptr = '\0';
-
-        for (char *p = morse; *p; p++) {
-          switch (*p) {
-            case '.':
-              send_symbol(HIGH, duration, 11, 11);
-              break;
-            case '-':
-              send_symbol(HIGH, DAH_WEIGHT * duration, 11, 11);
-              break;
-            case ' ':
-              send_symbol(LOW, PAUSE_WEIGHT * duration, 11, 11);
-              break;
-          }
-          send_symbol(LOW, duration, 11, 11);
-          if (state == 11) break;
-        }
-        send_symbol(LOW, DAH_WEIGHT * duration, 11, 11);
 
         break;
 
